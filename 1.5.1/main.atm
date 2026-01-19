@@ -1,0 +1,110 @@
+val sdl = require "atmos.env.sdl"
+val SDL = require "SDL"
+
+val w_screen, h_screen = (200, 120)
+
+val _, REN = sdl.window @{
+	title  = "Ex. 1.5.1 - Atmos",
+	width = w_screen,
+	height = h_screen,
+	flags = @{ SDL.flags.OpenGL },
+} --> assert
+
+spawn{
+	val color = @{r=255, g=255, b=255}
+	every :sdl.draw{
+		REN::setDrawColor(color)
+		REN::clear()
+	}
+}
+
+func check_lim (min, max, num){
+	ifs{
+		num > max => max
+		num < min => min
+		else	=> num
+	}
+}
+
+func Rect_Anima (x0,y0){
+	val rect_size = 20
+	val rect = @{ x = check_lim (0, w_screen, x0),
+	y = check_lim (0, h_screen, y0),
+	w = rect_size,
+	h = rect_size }
+	val color = @{r=0,g=0,b=255}
+	
+	par {
+		loop{
+			watching \{rect.x > (w_screen - rect.w)}{ 
+				every _,ms in :clock {		
+					set rect.x = rect.x + 5
+				}
+			}
+			watching \{rect.x < 0}{
+				every _,ms in :clock {		
+					set rect.x = rect.x - 5
+				}
+			}
+		}
+	}with {
+		every :sdl.draw{
+			REN::setDrawColor(color)
+			REN::fillRect(sdl.ints (rect))
+		}
+	}
+}
+
+func Rect_Key(x0,y0){
+	val rect_size = 20
+	val rect = @{ x = check_lim (0, w_screen, x0),
+	y = check_lim (0, h_screen, y0),
+	w = rect_size,
+	h = rect_size }
+	val color = @{r=0,g=0,b=255}
+	
+	spawn{
+		every it in SDL.event.KeyDown {
+			match it.name{
+				'Up' => set rect.y = check_lim (0, h_screen - rect.h, rect.y - 5)
+				'Down' => set rect.y = check_lim (0, h_screen - rect.h, rect.y + 5)
+				'Left' => set rect.x = check_lim (0, w_screen - rect.w, rect.x - 5)
+				'Right' => set rect.x = check_lim (0, w_screen - rect.w, rect.x + 5)
+			}
+		}
+	}
+		
+	every :sdl.draw{
+		REN::setDrawColor(color)
+		REN::fillRect(sdl.ints (rect))
+	}
+}
+
+func Rect_Mouse(x0,y0){
+	val rect_size = 20
+	val rect = @{ x = check_lim (0, w_screen, x0),
+	y = check_lim (0, h_screen, y0),
+	w = rect_size,
+	h = rect_size }
+	val color = @{r=0,g=0,b=255}
+	
+	par{
+		every x,y in SDL.getMouseState{
+			;;print(x, y)
+			set rect.x = check_lim (0, w_screen - rect.w, x)
+			set rect.y = check_lim (0, h_screen - rect.h, y)
+		}
+	} with{	
+		every :sdl.draw{
+			REN::setDrawColor(color)
+			REN::fillRect(sdl.ints (rect))
+		}
+	}
+}
+
+spawn Rect_Anima (40,20)
+spawn Rect_Key (40,50)
+spawn Rect_Mouse(40,80)
+await(false)
+			
+			
