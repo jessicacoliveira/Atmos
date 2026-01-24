@@ -38,12 +38,12 @@ func Rect_Anima (x0,y0){
 		loop{
 			watching \{rect.x > (w_screen - rect.w)}{ 
 				every _,ms in :clock {		
-					set rect.x = rect.x + 5
+					set rect.x = rect.x + (5*(ms/50))
 				}
 			}
 			watching \{rect.x < 0}{
 				every _,ms in :clock {		
-					set rect.x = rect.x - 5
+					set rect.x = rect.x - (5*(ms/50))
 				}
 			}
 		}
@@ -63,7 +63,7 @@ func Rect_Key(x0,y0){
 	h = rect_size }
 	val color = @{r=0,g=0,b=255}
 	
-	spawn{
+	par {
 		every it in SDL.event.KeyDown {
 			match it.name{
 				'Up' => set rect.y = check_lim (0, h_screen - rect.h, rect.y - 5)
@@ -72,13 +72,15 @@ func Rect_Key(x0,y0){
 				'Right' => set rect.x = check_lim (0, w_screen - rect.w, rect.x + 5)
 			}
 		}
-	}
-		
-	every :sdl.draw{
-		REN::setDrawColor(color)
-		REN::fillRect(sdl.ints (rect))
+	} with {
+			
+		every :sdl.draw{
+			REN::setDrawColor(color)
+			REN::fillRect(sdl.ints (rect))
+		}
 	}
 }
+
 
 func Rect_Mouse(x0,y0){
 	val rect_size = 20
@@ -106,5 +108,3 @@ spawn Rect_Anima (40,20)
 spawn Rect_Key (40,50)
 spawn Rect_Mouse(40,80)
 await(false)
-			
-			
