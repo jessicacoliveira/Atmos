@@ -6,7 +6,7 @@ val rect_max = 10
 
 math.randomseed()
 
-;;sdl.window equivale ao SDL_CreateWindow + SDL_CreateRenderer
+;; sdl.window equivale ao SDL_CreateWindow + SDL_CreateRenderer
 val _, REN = sdl.window @{
 	title  = "Ex. 1.4.1 - Atmos",
 	width = w_screen,
@@ -22,7 +22,7 @@ func check_lim (min, max, num){
 	}
 }
 
-;; Como trocar a cor de fundo? 
+;; Troca a cor de fundo
 spawn {
 	val color = @{r=255,g=255,b=255}
 	every :sdl.draw{
@@ -37,7 +37,7 @@ func Big_Square (x0, y0){
 	val rect = @{ x = x0, y = y0, w = rect_size, h = rect_size }
 	val color = @{r=0,g=0,b=255}
 
-	spawn{
+	par {
 		every it in SDL.event.KeyDown {
 			match it.name{
 				'Up' => set rect.y = check_lim (0, h_screen - rect.h, rect.y - 5)
@@ -46,11 +46,12 @@ func Big_Square (x0, y0){
 				'Right' => set rect.x = check_lim (0, w_screen - rect.w, rect.x + 5)
 			}
 		}
-	}
+	} with {
 	
-	every :sdl.draw{
-		REN::setDrawColor(color)
-		REN::fillRect(sdl.ints @{ x=rect.x, y=rect.y, w=rect.w, h=rect.h })
+		every :sdl.draw{
+			REN::setDrawColor(color)
+			REN::fillRect(sdl.ints @{ x=rect.x, y=rect.y, w=rect.w, h=rect.h })
+		}
 	}
 }
 
@@ -65,7 +66,6 @@ func Random_Square (x0, y0){
 		     
 	every :sdl.draw{
 		REN::setDrawColor(color)
-		;;REN::setDrawColor(0x00FF00)
 		REN::fillRect(sdl.ints @{ x=rect.x, y=rect.y, w=rect.w, h=rect.h })
 	}
 }
@@ -73,6 +73,5 @@ func Random_Square (x0, y0){
 spawn Big_Square (40,20)
 pin random_squares = tasks (rect_max)
 every it in SDL.event.MouseButtonDown {
-	spawn [random_squares] Random_Square(it.x, it.y)
+		spawn [random_squares] Random_Square(it.x, it.y)
 }
-await(false)
