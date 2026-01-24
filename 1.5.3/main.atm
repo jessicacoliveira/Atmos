@@ -37,14 +37,6 @@ func aux_func (rect){
             }
 }
 
-func set_stop(stop){
-	ifs{
-		stop == 0 => 1
-		stop == 1 => 0
-	}
-}
-
-
 func Rect_Anima (x0,y0){
 	val rect_size = 20
 	val rect = @{ x = check_lim (0, w_screen, x0),
@@ -53,14 +45,13 @@ func Rect_Anima (x0,y0){
 	h = rect_size }
 	val color = @{r=0,g=0,b=255}
 	
-	var rx, ry, stop, dv = (1, 1, 1, 2)
+	var rx, ry, stop, dv = (1, 1, 1, w_screen/25)
 	spawn{
 		every it in SDL.event.KeyDown {
 			match it.name{
 				'A' => set rx, ry = ((-1)*rx, (-1)*ry)
 				'S' => set rect.w, rect.h = ((rect.w + 1), (rect.h + 1))
 				'X' => set rect.w, rect.h = ((rect.h - 1), (rect.h - 1))
-				'Space' => set stop = set_stop(stop)
 				'T' => set color.r, color.g, color.b = (math.random(0,200), math.random(0,200), math.random(0,200))
 				'D' => set dv = dv + 2
 				'C' => set dv = check_lim(1, 10, dv - 2)
@@ -70,36 +61,40 @@ func Rect_Anima (x0,y0){
 	
 	par {
 		loop{
-			watching (\{(rect.x > (w_screen - rect.w))} || aux_func(rect)) {
-				every _,ms in :clock {		
-					set rect.x = rect.x + ((rx*dv) * stop)
+			toggle :pause {
+				watching (\{(rect.x > (w_screen - rect.w))} || aux_func(rect)) {
+					every _,ms in :clock {
+						val dt = ms/100
+						set rect.x = rect.x + ((rx*(dv*dt)))
+					}
 				}
-			}
-			set rx = (-1)*rx
+				set rx = (-1)*rx
 			
-			watching (\{rect.y > (h_screen - rect.h)} || aux_func(rect)){
-				every _,ms in :clock {		
-					set rect.y = rect.y + ((ry*dv)*stop)
+				watching (\{rect.y > (h_screen - rect.h)} || aux_func(rect)){
+					every _,ms in :clock {		
+						val dt = ms/100
+						set rect.y = rect.y + ((ry*(dv*dt)))
+					}
 				}
-			}
-			set ry = (-1)*ry
-			
-			watching (\{rect.x < 0} || aux_func(rect)){
-				every _,ms in :clock {		
-					set rect.x = rect.x + ((rx*dv)*stop)
+				set ry = (-1)*ry
+				
+				watching (\{rect.x < 0} || aux_func(rect)){
+					every _,ms in :clock {		
+						val dt = ms/100
+						set rect.x = rect.x + ((rx*(dv*dt)))
+					}
 				}
-			}
-			set rx = (-1)*rx
-			
-			watching (\{rect.y < 0 } || aux_func(rect)){
-				every _,ms in :clock {		
-					set rect.y = rect.y + ((ry*dv)*stop)
+				set rx = (-1)*rx
+				
+				watching (\{rect.y < 0 } || aux_func(rect)){
+					every _,ms in :clock {	
+						val dt = ms/100
+						set rect.y = rect.y + ((ry*(dv*dt)))
+					}
 				}
-			}
-			set ry = (-1)*ry
-			
-			
-		}
+				set ry = (-1)*ry
+			} ;;toggle
+		} ;;loop
 	}with {
 		every :sdl.draw{
 			REN::setDrawColor(color)
@@ -110,7 +105,10 @@ func Rect_Anima (x0,y0){
 
 
 spawn Rect_Anima (0,0)
-
-await(false)
-			
+loop{
+	await(SDL.event.KeyDown, 'Space')
+	emit('pause', false)
+	await(SDL.event.KeyDown, 'Space')
+	emit('pause', true)	
+}
 			
