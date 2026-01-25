@@ -1,0 +1,150 @@
+val sdl = require "atmos.env.sdl"
+val SDL = require "SDL"
+val TTF = require "SDL.ttf"
+
+val w_screen, h_screen = (1200, 600)
+
+val _, REN = sdl.window @{
+	title  = "Ex. 1.6 - Atmos",
+	width = w_screen,
+	height = h_screen,
+	flags = @{ SDL.flags.OpenGL },
+} --> assert
+
+set FNT = TTF.open("tiny.ttf", 20) --> assert
+set PP = sdl.pct_to_pos
+
+spawn{
+	val color = @{r=255, g=255, b=255}
+	every :sdl.draw{
+		REN::setDrawColor(color)
+		REN::clear()
+	}
+}
+
+func check_lim (min, max, num){
+	ifs{
+		num > max => max
+		num < min => min
+		else	=> num
+	}
+}
+
+func Car (x0,y0,type){
+	val rect_size = 200
+	val rect = @{ x = check_lim (0, w_screen, x0),
+	y = check_lim (0, h_screen, y0),
+	w = rect_size,
+	h = rect_size/2 }
+	val color = @{r=0,g=0,b=255}
+	
+	set pub = @{
+		rect = rect,
+		type = type,
+	}
+	par {
+		watching :collided {
+			match type{
+				:anima => {
+					watching \{rect.x > (w_screen - rect.w)}{ 
+						every _,ms in :clock {		
+							set rect.x = rect.x + (5*(ms/50))
+						}
+					}
+				}
+				:key => {
+					every it in SDL.event.KeyDown {
+						match it.name{
+							'Left' => set rect.x =
+								check_lim (0, w_screen - rect.w, rect.x - 5)
+							'Right' => set rect.x =
+								check_lim (0, w_screen - rect.w, rect.x + 5)
+						}
+					}
+				}
+				:mouse => {
+					every x,y in SDL.getMouseState{
+						set rect.x = check_lim (0, w_screen - rect.w, x)
+					}
+				}
+			}
+		}
+	} with {
+		every :sdl.draw{
+			REN::setDrawColor(color)
+			REN::fillRect(sdl.ints (rect))
+		}
+	}
+}
+
+func xxx_line (x0, y0, w_rect){
+	val rect = @{ x = x0, y = y0, w = w_rect, h = h_screen }
+	val color = @{ r = 255, g = 0, b = 0 }
+	
+	set pub = @{
+		rect = rect
+	}
+	
+	every :sdl.draw{
+			REN::setDrawColor(color)
+			REN::fillRect(sdl.ints (rect))
+	}
+}
+	
+
+loop {
+	pin cars = tasks(3)
+	spawn [cars] Car (50,50,:anima)
+	spawn [cars] Car (50,250,:key)
+	spawn [cars] Car (50,450,:mouse)
+	
+	pin start = spawn xxx_line (0,0, 50)
+	pin finish = spawn xxx_line (w_screen - 100, 0, 100)
+	var winner = "teste"
+	
+	watching :collided {
+		every :clock {
+	   		loop _,car in cars {
+	   		    	if sdl.rect_vs_rect(car.pub.rect, finish.pub.rect) {
+	   		    		set winner = ifs{
+	   		    			car.pub.type == :anima => "Animacao"
+	   		    			car.pub.type == :key => "Teclado"
+	   		    			car.pub.type == :mouse => "Mouse"
+	   		    		}
+	   		    		emit :collided
+	   		    	}
+	   		}
+	   	}
+	}
+	
+	spawn{
+		val rect_winner = @{ x = (w_screen/2) - 200,
+			y = (h_screen/2) - 80, w = 400, h = 160 }
+		val rect_txt = @{ x = (w_screen/2) - 100,
+			y = (h_screen/2) -40, w = 280, h = 80 }
+		val rect_txt2 = @{ x = (w_screen/2) - 200,
+			y = (h_screen/2) +150, w = 400, h = 30 }
+			
+		val color = @{ r = 0, g = 0, b = 0 }
+		val color_txt = @{r = 255, g = 255, b = 255}
+		val color_txt2 = @{r = 255, g = 0, b = 0}
+		
+		val sfc_txt = FNT::renderUtf8(winner, "blended", color_txt) --> assert
+		val tex_txt = REN::createTextureFromSurface(sfc_txt) --> assert
+		
+		val sfc_txt2 = FNT::renderUtf8("Press SPACEBAR to restart", "blended", color_txt2) --> assert
+		val tex_txt2 = REN::createTextureFromSurface(sfc_txt2) -->assert
+		
+		every :sdl.draw{
+			REN::setDrawColor(color)
+			REN::fillRect(sdl.ints (rect_winner))
+			REN::copy(tex_txt, nil, sdl.ints (rect_txt))
+			REN::copy(tex_txt2, nil, sdl.ints (rect_txt2))
+			
+		}
+	}
+	
+	await(SDL.event.KeyDown, 'Space')
+}
+			
+			
