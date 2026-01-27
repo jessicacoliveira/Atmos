@@ -1,0 +1,62 @@
+val sdl = require "atmos.env.sdl"
+val SDL = require "SDL"
+
+val w_screen, h_screen = (800,600)
+
+val _, REN = sdl.window @{
+	title  = "Ex. 2.2 - Atmos",
+	width = w_screen,
+	height = h_screen,
+	flags = @{ SDL.flags.OpenGL },
+} --> assert
+
+func rect (x0,y0){
+	val rect_size = 100
+	val rect = @{ x = x0, y = y0, w = rect_size, h = rect_size }
+	var color = @{ r = 0, g = 0, b = 255 }
+	var x_, y_
+	
+	par{	
+		loop {
+			watching (SDL.event.KeyDown, 'Escape'){
+				every it in SDL.event.MouseButtonDown {
+					val teste = sdl.point_vs_rect(sdl.ints (@{ x= it.x, y = it.y }), sdl.ints (rect))
+					await (teste)
+					print("Pressing...")
+					set color = @{ r = 0, g = 255, b = 0 }
+					set x_, y_ = (rect.x, rect.y)
+					
+					par_or{
+						await(SDL.event.MouseMotion)
+						print("Dragging...")
+						set color = @{ r = 255, g = 0, b = 0 }
+						watching (SDL.event.MouseButtonUp, 'LEFT') {
+							every x,y in SDL.getMouseState{
+								set rect.x = x
+								set rect.y = y
+							}
+						}
+						print("Dropped!")
+					} with {
+						await(SDL.event.MouseButtonUp)
+						print("Clicked!")
+					}
+					;;IDLE
+					set color = @{ r = 0, g = 0, b = 255 }
+				
+				}
+			}
+			print("Cancelled!")
+			set color = @{ r = 0, g = 0, b = 255 }
+			set rect.x, rect.y = (x_,y_)
+		}
+	} with{
+		every :sdl.draw{
+			REN::setDrawColor(color)
+			REN::fillRect(sdl.ints (rect))
+		}
+	}
+}
+
+spawn rect (0,0)
+await(false)
