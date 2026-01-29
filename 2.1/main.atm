@@ -1,0 +1,51 @@
+val sdl = require "atmos.env.sdl"
+val SDL = require "SDL"
+
+val w_screen, h_screen = (800, 600)
+val rect_size = 100
+
+val _, REN = sdl.window @{
+	title  = "Ex. 2.1 - Atmos",
+	width = w_screen,
+	height = h_screen,
+	flags = @{ SDL.flags.OpenGL },
+} --> assert
+
+func Rect (x0, y0){
+	val rect = @{ x = x0 - (rect_size/2),
+		      y = y0 - (rect_size/2),
+		      w = rect_size,
+		      h = rect_size,
+		     }
+	val color = @{ r = 0, g = 0, b = 255}
+	
+	var counter_click = 0
+	
+	par {
+		loop{
+			await(SDL.event.MouseButtonDown, \{ sdl.point_vs_rect(it, sdl.ints (rect)) })
+			set counter_click = counter_click + 1
+			watching (SDL.event.MouseMotion){
+				loop{
+					par_or {
+						await(SDL.event.MouseButtonDown)
+						set counter_click = counter_click + 1
+					} with {
+						await (@.250)
+						break()
+					}
+				}
+			}
+			print("Numero de cliques: ", counter_click)
+			set counter_click = 0
+		}
+	} with {	     
+		every :sdl.draw{
+			REN::setDrawColor(color)
+			REN::fillRect(sdl.ints (rect))
+		}
+	}
+}
+
+spawn Rect(w_screen/2, h_screen/2)
+await(false)
