@@ -19,9 +19,8 @@ func rect (x0,y0){
 	par{	
 		loop {
 			watching (SDL.event.KeyDown, 'Escape'){
-				every it in SDL.event.MouseButtonDown {
-					val teste = sdl.point_vs_rect(sdl.ints (@{ x= it.x, y = it.y }), sdl.ints (rect))
-					await (teste)
+				loop {
+					val click = await (SDL.event.MouseButtonDown, \{ sdl.point_vs_rect(sdl.ints (@{ x= it.x, y = it.y }), sdl.ints (rect)) })
 					print("Pressing...")
 					set color = @{ r = 0, g = 255, b = 0 }
 					set x_, y_ = (rect.x, rect.y)
@@ -32,8 +31,8 @@ func rect (x0,y0){
 						set color = @{ r = 255, g = 0, b = 0 }
 						watching (SDL.event.MouseButtonUp, 'LEFT') {
 							every x,y in SDL.getMouseState{
-								set rect.x = x
-								set rect.y = y
+								set rect.x = x_ + (x - click.x)
+								set rect.y = y_ + (y - click.y)
 							}
 						}
 						print("Dropped!")
@@ -41,9 +40,7 @@ func rect (x0,y0){
 						await(SDL.event.MouseButtonUp)
 						print("Clicked!")
 					}
-					;;IDLE
 					set color = @{ r = 0, g = 0, b = 255 }
-				
 				}
 			}
 			print("Cancelled!")
