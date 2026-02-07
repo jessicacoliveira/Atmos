@@ -91,7 +91,6 @@ func xxx_line (x0, y0, w_rect){
 	}
 }
 	
-
 loop {
 	pin cars = tasks(3)
 	spawn [cars] Car (50,50,:anima)
@@ -100,23 +99,24 @@ loop {
 	
 	pin start = spawn xxx_line (0,0, 50)
 	pin finish = spawn xxx_line (w_screen - 100, 0, 100)
-	var winner = "teste"
 	
-	watching :collided {
-		every :clock {
-	   		loop _,car in cars {
-	   		    	if sdl.rect_vs_rect(car.pub.rect, finish.pub.rect) {
-	   		    		set winner = ifs{
-	   		    			car.pub.type == :anima => "Animacao"
-	   		    			car.pub.type == :key => "Teclado"
-	   		    			car.pub.type == :mouse => "Mouse"
-	   		    		}
-	   		    		emit :collided
-	   		    	}
-	   		}
-	   	}
+	val winner = do :winner {
+    		every :clock {
+        		loop _,car in cars {
+        			if sdl.rect_vs_rect(car.pub.rect, finish.pub.rect) {
+        				emit [cars] :collided
+            				escape(:winner, car.pub.type)
+        			}
+    			}
+		}
 	}
 	
+	val txts = @{
+    			key   = "Teclado",
+    			mouse = "Mouse",
+    			anima  = "Animacao",
+		}
+		
 	spawn{
 		val rect_winner = @{ x = (w_screen/2) - 200,
 			y = (h_screen/2) - 80, w = 400, h = 160 }
@@ -129,7 +129,7 @@ loop {
 		val color_txt = @{r = 255, g = 255, b = 255}
 		val color_txt2 = @{r = 255, g = 0, b = 0}
 		
-		val sfc_txt = FNT::renderUtf8(winner, "blended", color_txt) --> assert
+		val sfc_txt = FNT::renderUtf8(txts[winner], "blended", color_txt) --> assert
 		val tex_txt = REN::createTextureFromSurface(sfc_txt) --> assert
 		
 		val sfc_txt2 = FNT::renderUtf8("Press SPACEBAR to restart", "blended", color_txt2) --> assert
