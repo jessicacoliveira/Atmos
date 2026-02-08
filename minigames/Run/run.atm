@@ -1,49 +1,20 @@
-val sdl = require "atmos.env.sdl"
-val SDL = require "SDL"
-val TTF = require "SDL.ttf"
-val IMG = require "SDL.image"
+require "atmos.env.pico"
+set pico = require "pico"
 
 val w_screen, h_screen = (350,350)
 val PI = 3.1415
 
-set FNT = TTF.open("tiny.ttf", 15) --> assert ;;Trocar fonte para Arial
 math.randomseed()
 
-val score = 0
+pico.zet.title "Game 1 - Run"
+val dim = @{ "!", w = 350, h = 350 }
+pico.zet.view @{ window=dim, world=dim }
 
-val _, REN = sdl.window @{
-	title  = "Game 1 - Run",
-	width = w_screen,
-	height = h_screen,
-	flags = @{ SDL.flags.OpenGL },
-} --> assert
-
-val sprite_enemy1 = tex where{
-	sfc = IMG.load("run/enemy1.png") -->assert
-	tex = REN::createTextureFromSurface(sfc) -->assert
-}
-
-val sprite_enemy2 = tex where{
-	sfc = IMG.load("run/enemy2.png") -->assert
-	tex = REN::createTextureFromSurface(sfc) -->assert
-}
-
-val sprite_player = tex where{
-	sfc = IMG.load("run/player.png") -->assert
-	tex = REN::createTextureFromSurface(sfc) -->assert
-}
-
-;; Background (cor #34495e)
 spawn{
-	val color = @{r=52, g=73, b=94}
-	every :sdl.draw{
-		REN::setDrawColor(color)
-		REN::clear()
+	every :draw{
+		pico.zet.color.clear(52,73,94)
+		pico.output.clear ()
 	}
-}
-
-func random_signal (){
-	if (math.random(0,1) == 1) => 1 => -1
 }
 
 func check_lim (min, max, num){
@@ -54,138 +25,196 @@ func check_lim (min, max, num){
 	}
 }
 
-func player (x0,y0){
-	val rect = @{ x = (x0 - 20)/2,
-	y = (y0 - 24)/2,
-	w = 20,
-	h = 24 }
-	val color = @{r=0,g=0,b=255}
-	
-	set pub = @{
-		rect = rect
-	}
-	
-	par {
-		every it in SDL.event.KeyDown {
-			match it.name{
-				'Up' => set rect.y = check_lim (0, h_screen - rect.h, rect.y - 5)
-				'Down' => set rect.y = check_lim (0, h_screen - rect.h, rect.y + 5)
-				'Left' => set rect.x = check_lim (0, w_screen - rect.w, rect.x - 5)
-				'Right' => set rect.x = check_lim (0, w_screen - rect.w, rect.x + 5)
-			}
-		}
-	} with {
-			
-		every :sdl.draw{
-			val crop = @{ x=0, y=0, w=20, h=24 }
-        			REN::copy(sprite_player, crop, sdl.ints(rect))
-		}
-	}
+func player3 (x0,y0){
+    val rect = @{ '!', x = (x0 - 20)/2, y = (y0 - 24)/2, w = 20, h = 24 }
+    val dim = pico.get.image("run/player.png")
+    
+    var frame_idx = 0
+    var linha_idx = 3 ;; 0=Down, 2=Up, 1=Right, 3=Left
+    val total_frames = 2
+    
+    set pub = @{
+        rect = rect
+    }
+    
+    par {
+        every it in :key.dn {
+            match it.key {
+                'Up'    => { 
+                    set rect.y = check_lim (0 + (rect.h/2), h_screen - (rect.h/2), rect.y - 10)
+                    set frame_idx = (frame_idx + 1) % total_frames
+                    set linha_idx = 2
+                }
+                'Down'  => { 
+                    set rect.y = check_lim (0, h_screen - (rect.h/2), rect.y + 10)
+                    set frame_idx = (frame_idx + 1) % total_frames
+                    set linha_idx = 0
+                }
+                'Left'  => { 
+                    set rect.x = check_lim (0 + (rect.w/2), w_screen - (rect.w/2), rect.x - 10)
+                    set frame_idx = (frame_idx + 1) % total_frames
+                    set linha_idx = 3
+                }
+                'Right' => { 
+                    set rect.x = check_lim (0 + (rect.w/2), w_screen - (rect.w/2), rect.x + 10)
+                    set frame_idx = (frame_idx + 1) % total_frames
+                    set linha_idx = 1
+                }
+            }
+        }
+    } with {
+        every :draw {
+            val crop_x = frame_idx * rect.w
+            val crop_y = linha_idx * rect.h
+            
+            pico.zet.crop @{ '!', x = crop_x, y = crop_y, w = rect.w, h = rect.h }
+            pico.output.draw.image("run/player.png", rect)
+            pico.zet.crop()
+        }
+    }
 }
 
-
 func enemy1 (x0, y0, angle){
-	val rect = @{ x= x0 , y= y0, w = 32, h = 36 }
-	val speed = w_screen/3 
-	
-	set pub = @{
-		rect = rect
-	}
-	
-	watching \{ (rect.x>w_screen) || (rect.y>h_screen) } {
-		par {
-        		every _, ms in :clock {
-          			val ds = (speed * ms) / 1000.0
-            
-            			set rect.x = rect.x + (ds * math.cos(angle))
-            			set rect.y = rect.y + (ds * math.sin(angle))
-        		}
-        	} with{
-        		every :sdl.draw {
-        			val crop = @{ x=0, y=0, w=32, h=36 }
-        			REN::copy(sprite_enemy1, crop, sdl.ints(rect))
-        		}
-        	}
+    val rect = @{ '!', x= x0 , y= y0, w = 32, h = 36 }
+    val speed = w_screen/2
+    val dim = pico.get.image("run/enemy1.png")
+    
+    var timer = 0
+    var frame_idx = 0
+    val total_frames = 2
+    
+    set pub = @{
+        rect = rect
+    }
+    
+    watching \{ (rect.x > w_screen) || (rect.x < -rect.w) || (rect.y > h_screen) || (rect.y < -rect.h) }, :collided {
+        par {
+            every _, ms in :clock {
+                val ds = (speed * ms) / 1000.0
+                set rect.x = rect.x + (ds * math.cos(angle))
+                set rect.y = rect.y + (ds * math.sin(angle))
+                
+                ;; 5fps = 200ms?
+                set timer = timer + ms
+                if timer >= 200 {
+                    set frame_idx = (frame_idx + 1) % total_frames
+                    set timer = 0
+                }
+            }
+        } with {
+            every :draw {
+                val crop_x = frame_idx * rect.w
+                if (crop_x + rect.w) <= dim.w {
+                    pico.zet.crop @{ '!', x = crop_x, y = 0, w = rect.w, h = rect.h }
+                    pico.output.draw.image("run/enemy1.png", rect)
+                    pico.zet.crop()
+                } else {
+                    pico.output.draw.image("run/enemy1.png", rect)
+                }
+            }
         }
+    }
 }
 
 func enemy2 (x0, y0, angle){
-	val rect = @{ x= x0 , y= y0, w = 32, h = 36 }
-	val speed = w_screen/3 
-	val color = @{r=255,g=0,b=0}
-	
-	set pub = @{
-		rect = rect
-	}
-	
-	watching \{ (rect.x>w_screen) || (rect.y>h_screen) } {
-		par {
-        		every _, ms in :clock {
-          		val ds = (speed * ms) / 1000.0
-            
-            		set rect.x = rect.x + (ds * math.cos(angle))
-            		set rect.y = rect.y + (ds * math.sin(angle))
-        		}
-        	} with{
-        		every :sdl.draw {
-        			val crop = @{ x=0, y=0, w=32, h=36 }
-        			REN::copy(sprite_enemy2, crop, sdl.ints(rect))
-        		}
-        	}
+    val rect = @{ '!', x= x0 , y= y0, w = 28, h = 40 }
+    val speed = w_screen/2
+    val dim = pico.get.image("run/enemy2.png")
+    
+    var timer = 0
+    var frame_idx = 0
+    val total_frames = 2
+    
+    set pub = @{
+        rect = rect
+    }
+    
+    watching \{ (rect.x > w_screen) || (rect.x < -rect.w) || (rect.y > h_screen) || (rect.y < -rect.h) }, :collided {
+        par {
+            every _, ms in :clock {
+                val ds = (speed * ms) / 1000.0
+                set rect.x = rect.x + (ds * math.cos(angle))
+                set rect.y = rect.y + (ds * math.sin(angle))
+                
+                ;; 5fps = 200ms?
+                set timer = timer + ms
+                if timer >= 200 {
+                    set frame_idx = (frame_idx + 1) % total_frames
+                    set timer = 0
+                }
+            }
+        } with {
+            every :draw {
+                val crop_x = frame_idx * rect.w
+                if (crop_x + rect.w) <= dim.w {
+                    pico.zet.crop @{ '!', x = crop_x, y = 0, w = rect.w, h = rect.h }
+                    pico.output.draw.image("run/enemy2.png", rect)
+                    pico.zet.crop()
+                } else {
+                    pico.output.draw.image("run/enemy2.png", rect)
+                }
+            }
         }
+    }
 }
 	
 loop{
 	pin enemies1 = tasks(30)
 	pin enemies2 = tasks(30)
-	pin single_player = spawn player (w_screen, h_screen)
+	pin single_player = spawn player3 (w_screen, h_screen)
 
 	var who, spawn_side, x_spawn, y_spawn, angle
 	
 	var score = 0
-	var message = "use the arrow keys to move"
 	
 	spawn{
-		every @1{
-			set score = score + 1
+		toggle :timer{
+			every @1{
+				set score = score + 1
+			}
 		}
 	}
 	
-	;;refazer: contar @3 após Up
+	;;esquisito, porém o texto deve desaparecer algum tempo após o player apertar qualquer tecla (n consegui fazer de outra forma)
 	spawn {
-		val color_txt = @{r = 255, g = 255, b = 255}
-		val sfc_txt = FNT::renderUtf8("use the arrow keys to move", "blended", color_txt) --> assert
-		val tex_txt = REN::createTextureFromSurface(sfc_txt) --> assert
-		
-		val rect_txt = @{ x = (w_screen/2) - 100,
-			y = (h_screen/2) + 50, w = 200, h = 20 }
-			
-		;;await(SDL.event.KeyDown, 'Up')
-		watching @2 {
-		    every :sdl.draw {
-			REN::setDrawColor(@{r=255,g=255,b=255})
-			REN::copy(tex_txt, nil, sdl.ints (rect_txt))
-		    }
-	    	}
+		;;val txt_pos = @{ '!', x = ((w_screen/2) - 100), y = ((h_screen/2) + 50)}
+		val txt_pos = @{ '%', x=0.5, y=0.6, h=0.065 }
+		par{
+			await(:key.dn, 'Up')
+			emit :warning
+			watching @.8 {
+				    every :draw {
+					pico.zet.color.draw "white"
+					pico.output.draw.text("use the arrow keys to move", txt_pos)
+				    }
+			}
+		}with{
+			watching :warning{
+				    every :draw {
+					pico.zet.color.draw "white"
+					pico.output.draw.text("use the arrow keys to move", txt_pos)
+				    }
+			}
+		}
 	}
 		
 	spawn {
-	    val rect_pos = sdl.pct_to_pos(15, 10)
-	    every :sdl.draw {
-		REN::setDrawColor(@{r=255,g=255,b=255})
-		sdl.write(FNT, tostring(score), rect_pos)
+	    val txt_pos = @{ '%', x=0.2, y=0.1, h=0.075 }
+	    every :draw {
+	    	pico.zet.color.draw "white"
+			pico.output.draw.text("score:" ++ score, txt_pos)
 	    }
 	}
 
 	watching :collided {
 		par{
-			every @.500 {
+			every @.300 {
 				set spawn_side = math.random(1, 4)
 				match spawn_side {
 					1 => { 
 				    		set x_spawn = 0
-				 		set y_spawn = math.random(0, h_screen)
-				 		set angle = (math.random() * PI) - (PI/2)
+				 			set y_spawn = math.random(0, h_screen)
+				 			set angle = (math.random() * PI) - (PI/2)
 			       		}
 					2 => { 
 				    		set x_spawn = w_screen
@@ -213,18 +242,42 @@ loop{
 		} with{
 			every :clock {
 				loop _, e1 in enemies1 {
-					if sdl.rect_vs_rect(single_player.pub.rect, e1.pub.rect) {
+					if pico.vs.rect_rect(single_player.pub.rect, e1.pub.rect) {
+			    			emit (:timer, false)
 			    			emit :collided
+			    			
 			    		}
 			    	}
 			    	loop _, e2 in enemies2 {
-					if sdl.rect_vs_rect(single_player.pub.rect, e2.pub.rect) {
+					if pico.vs.rect_rect(single_player.pub.rect, e2.pub.rect) {
+			    			emit (:timer, false)
 			    			emit :collided
 			    		}
 			    	}
 			}
 		}
-        }
-        
-        await(SDL.event.KeyDown, 'Up')
+	}
+
+	pico.output.sound "run/hit.wav"
+	
+	;;\n não funciona... teria algo do tipo em atmos/pico-atmos ou só quebrando o texto?
+	spawn{
+		val txt_GG = @{ '%', x=0.5, y=0.2, h=0.075 }
+		val txt_score = @{ '%', x=0.5, y=0.4, h=0.075 }
+		val txt_restart = @{ '%', x=0.5, y=0.6, h=0.075 }
+		val txt_restart2 = @{ '%', x=0.5, y=0.7, h=0.075 }
+		
+		every :draw {
+			pico.output.clear ()
+			pico.zet.color.draw "white"
+			
+			pico.output.draw.text("Game Over", txt_GG)
+			pico.output.draw.text(("Score: " ++ score), txt_score)
+			pico.output.draw.text("press the UP arrow key", txt_restart)
+			pico.output.draw.text("to restart", txt_restart2)
+			
+		    }
+	}
+	await(:key.dn, 'Up')
+	emit (:timer, true)
 }
