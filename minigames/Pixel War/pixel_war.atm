@@ -1,0 +1,340 @@
+require "atmos.env.pico"
+val pico = require "pico"
+
+val w_screen, h_screen = (300, 500)
+
+pico.zet.title "Game 2 - Pixel War"
+val dim = @{ '!', w = w_screen, h = h_screen }
+pico.zet.view @{ window = dim, world = dim }
+
+math.randomseed()
+
+;; Background color #2980b9
+spawn{
+	every :draw{
+		pico.zet.color.clear(41, 128, 185)
+		pico.output.clear()
+	}
+}
+
+;; Game instructions
+spawn{
+	watching (:key.dn, 'Up'){
+		val p = @{ '%', x = 0.5, y = 0.5 }
+		every :draw{
+			pico.output.draw.image("media/bg.png", p)
+		}
+	}
+}
+await (:key.dn, 'Up')
+
+;; Aux function to make player stay within the screen bounds
+func check_lim (min, max, num){
+	ifs{
+		num > max 	=> max
+		num < min 	=> min
+		else 		=> num
+	}
+}
+
+;; This enemy can be destroyed
+func enemy (){
+	val dim = pico.get.image("media/enemy.png")
+	val x0 = math.random(0 + (dim.w/2), w_screen - (dim.w/2))
+	val rect_enemy = @{ '!', x= x0 , y= 0, w = dim.w, h = dim.h }
+	val speed = 300
+
+    	set pub = @{
+        	rect = rect_enemy
+    	}
+    
+	watching \e { ((rect_enemy.y - (rect_enemy.h/2))  > h_screen) || (e == :collided) } {
+	        par {
+	            every _, ms in :clock {
+	                val ds = (speed * ms) / 1000.0
+	                set rect_enemy.y = rect_enemy.y + ds
+	                }
+	        } with {
+	            	every :draw{
+				pico.zet.crop @{ x=0, y=0, w=rect_enemy.w, h=rect_enemy.h }
+				pico.output.draw.image("media/enemy.png", rect_enemy)
+				pico.zet.crop()
+			}
+        	}
+        }
+}
+
+;; This one can't be destroyed
+func bullet (){
+	val dim = pico.get.image("media/bullet.png")
+	val x0 = math.random(0 + (dim.w/4), w_screen - (dim.w/4))
+	val rect_bullet = @{ '!', x= x0 , y= 0, w = dim.w/2, h = dim.h }
+	val speed = 350
+	
+	var timer = 0
+    	var frame_idx = 0
+    	val total_frames = 2
+
+    	set pub = @{
+        	rect = rect_bullet,
+        	collision = false
+    	}
+    
+	watching \{ ((rect_bullet.y - (rect_bullet.h/2))  > h_screen) } {
+	        par {
+	           	every _, ms in :clock {
+	        		val ds = (speed * ms) / 1000.0
+	           	     set rect_bullet.y = rect_bullet.y + ds
+	                
+	           	     set timer = timer + ms
+                		if timer >= 200 {
+                   			 set frame_idx = (frame_idx + 1) % total_frames
+                   			 set timer = 0
+	           	     }
+			}
+	        } with {
+	            	every :draw{
+				val crop_x = frame_idx * rect_bullet.w
+                		if (crop_x + rect_bullet.w) <= dim.w {
+                  			pico.zet.crop @{ '!', x = crop_x, y = 0, w = rect_bullet.w, h = rect_bullet.h }
+                    			pico.output.draw.image("media/bullet.png", rect_bullet)
+                    			pico.zet.crop()
+                		} else {
+                    			pico.output.draw.image("media/bullet.png", rect_bullet)
+                		}
+			}
+		} with {
+			await :collided
+			set pub.collision = true
+		}
+	}	
+}
+
+;; Bullets that come from the ship
+func shot (x0, y0){
+	val dim_sprite = pico.get.image("media/fire.png")
+	val rect_fire = @{ '!', x = x0, y = y0, w = dim_sprite.w, h = dim_sprite.h }
+	val speed = h_screen
+	
+	set pub = @{
+		rect = rect_fire
+	}
+	
+	watching \{ rect_fire.y < (-(rect_fire.h/2)) } {
+		par{
+			every _, ms in :clock {
+                		val ds = (speed * ms) / 1000
+                		set rect_fire.y = rect_fire.y - ds
+                	}
+		}with {
+			every :draw{
+				pico.zet.crop @{ x=0, y=0, w=rect_fire.w, h=rect_fire.h }
+				pico.output.draw.image("media/fire.png", rect_fire)
+				pico.zet.crop()
+			}
+		}
+	}
+}
+
+;; Itens that can be collected and upgrade player's attack
+func bonus (){
+	val dim_sprite = pico.get.image("media/bonus.png")
+	val x0 = math.random((0 + (dim_sprite.w/2)), (w_screen - (dim_sprite.w/2)))
+	val rect_bonus = @{ '!', x = x0, y = 0, w = dim_sprite.w, h = dim_sprite.h }
+	val speed = 150
+	
+	set pub = @{
+		rect = rect_bonus
+	}
+	
+	watching \e{ ((rect_bonus.y - (rect_bonus.h/2)) > h_screen) || (e == :collided)  } {
+		par{
+			every _, ms in :clock {
+                		val ds = (speed * ms) / 1000
+                		set rect_bonus.y = rect_bonus.y + ds
+                	}
+		}with {
+			every :draw{
+				pico.zet.crop @{ x=0, y=0, w=rect_bonus.w, h=rect_bonus.h }
+				pico.output.draw.image("media/bonus.png", rect_bonus)
+				pico.zet.crop()
+			}
+		}
+	}
+}
+		
+func player (x0, y0){
+	val dim_sprite = pico.get.image("media/player.png") ;; 1 frame
+	val rect_player = @{ '!', x = x0, y = y0, w = dim_sprite.w, h = dim_sprite.h }
+	pin shots = tasks(25)
+	var shoot_test
+	
+	set pub = @{
+		rect = rect_player,
+		shots = shots
+	}
+	
+	par{
+		every it in :key.dn{
+			match it.key{
+				'Up' 	=>{
+					ifs{
+						(shoot_test == 1) =>
+							spawn [shots] shot(rect_player.x, rect_player.y - (rect_player.h/2))
+						(shoot_test == 2) =>{
+							spawn [shots] shot(rect_player.x - (rect_player.w/4), rect_player.y - (rect_player.h/2))
+							spawn [shots] shot(rect_player.x + (rect_player.w/4), rect_player.y - (rect_player.h/2))
+						}
+						(shoot_test == 3) =>{
+							spawn [shots] shot(rect_player.x, rect_player.y - (rect_player.h/2))
+							spawn [shots] shot(rect_player.x - (rect_player.w/2), rect_player.y - (rect_player.h/2))
+							spawn [shots] shot(rect_player.x + (rect_player.w/2), rect_player.y - (rect_player.h/2))
+							}
+					}
+					pico.output.sound "media/fire.wav"
+					
+					;; Recoil animation
+					set rect_player.y = rect_player.y + 5
+					await @.9
+					set rect_player.y = rect_player.y - 5 
+        				
+        			}
+				'Left'	=> set rect_player.x = check_lim (0 + (rect_player.w/2), w_screen - (rect_player.w/2), rect_player.x -10) 
+				'Right' => set rect_player.x = check_lim (0 + (rect_player.w/2), w_screen - (rect_player.w/2), rect_player.x +10) 
+			}
+		}
+	} with{
+		par{
+			every :SINGLE_SHOT{
+				set shoot_test = 1
+			}
+		}with{
+        		every (:DOUBLE_SHOT){
+        			set shoot_test = 2
+        		}
+        	}with{
+        		every (:TRIPLE_SHOT){
+        			set shoot_test = 3
+        		}
+        	}	
+	} with{
+		every :draw{
+			pico.output.draw.image("media/player.png", rect_player)
+		}
+	}
+}
+
+;; Game Loop
+loop{
+	pin single_player = spawn player (w_screen/2, h_screen - 70)
+	pin enemies1 = tasks(30)
+	pin enemies2 = tasks(30)
+	pin bonuses = tasks(3)
+	var score = 0
+	var evolution = 1
+	var life = 3
+	var t_bullet = 1
+	
+	emit :SINGLE_SHOT
+	
+	spawn {
+	    val txt_score = @{ '%', x=0.1, y=0.05, h=0.075 }
+	    val txt_life = @{ '%', x=0.9, y=0.05, h=0.075 }
+	    every :draw {
+	    	pico.zet.color.draw "white"
+		pico.output.draw.text(score, txt_score)
+		pico.output.draw.text(life, txt_life)
+	    }
+	}
+	
+	watching :GameOver {
+		par{
+			every @1 {
+				spawn [enemies1] enemy()
+			}
+		} with{
+			loop{
+				;; "every @t_bullet" didn't work as I expected (?)
+				await @t_bullet 
+				spawn [enemies2] bullet()
+			}
+		} with{
+			every @5 {
+				spawn [bonuses] bonus()
+			}
+		} with{
+			every :clock {
+				loop _, e1 in enemies1 {
+					loop _, shot in single_player.pub.shots {
+						if pico.vs.rect_rect(e1.pub.rect, shot.pub.rect) {
+			    				emit [shot]	:collided
+			    				emit [e1]	:collided
+			    				pico.output.sound "media/exp.wav"
+			    				set score = score + 10
+			    				set t_bullet = (1000 - (score/2))/1000
+			    			}
+			    		}
+			    		if pico.vs.rect_rect(e1.pub.rect, single_player.pub.rect) {
+			    			emit [e1]	:collided
+			    			emit		:damage
+			    		}
+			    	}
+			    	loop _, e2 in enemies2 {
+			    		if !e2.pub.collision && pico.vs.rect_rect(e2.pub.rect, single_player.pub.rect) {
+			    			emit [e2]	:collided
+			    			emit 		:damage
+			    		}
+			    	}
+			    	loop _, bonus in bonuses {
+					if pico.vs.rect_rect(single_player.pub.rect, bonus.pub.rect) {
+			    			emit [bonus] :collided
+			    			emit :bonus
+			    		}
+			    	}	
+			}
+		} with{
+			loop{
+				await :damage
+				set life = life - 1
+				pico.output.sound "media/hit.wav"
+				if life == 0 => emit :GameOver
+				set evolution = 1
+				emit [single_player] :SINGLE_SHOT
+			}
+		} with{
+			loop{
+				await :bonus
+				pico.output.sound "media/bonus.wav"
+				set score = score + 100
+				set t_bullet = (1000 - (score/2))/1000
+				set evolution = check_lim(1, 3, evolution + 1)
+				ifs{
+					evolution == 1	=> emit [single_player] :SINGLE_SHOT
+					evolution == 2	=> emit [single_player] :DOUBLE_SHOT
+					evolution == 3	=> emit [single_player] :TRIPLE_SHOT
+				}
+			}
+		}
+	}
+	
+	pico.output.sound "media/dead.wav"
+	
+	spawn{
+		val txt_GG = @{ '%', x=0.5, y=0.3, h=0.06 }
+		val txt_score = @{ '%', x=0.5, y=0.45, h=0.06 }
+		val txt_restart = @{ '%', x=0.5, y=0.6, h=0.06 }
+		val txt_restart2 = @{ '%', x=0.5, y=0.7, h=0.06 }
+		
+		every :draw {
+			pico.output.clear ()
+			pico.zet.color.draw "white"
+			
+			pico.output.draw.text("Game Over", txt_GG)
+			pico.output.draw.text(("Score: " ++ score), txt_score)
+			pico.output.draw.text("press the UP arrow", txt_restart)
+			pico.output.draw.text("key to restart", txt_restart2)
+			
+		    }
+	}
+	await(:key.dn, 'Up')
+}
