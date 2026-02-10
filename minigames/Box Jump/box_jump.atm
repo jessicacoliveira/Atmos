@@ -1,0 +1,190 @@
+require "atmos.env.pico"
+val pico = require "pico"
+
+val w_screen, h_screen = (600, 200)
+
+pico.zet.title "Game 3 - Box Jump"
+val dim = @{'!', w = w_screen, h = h_screen }
+pico.zet.view @{ window = dim, world = dim }
+
+val map = @{
+  @{0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+  @{0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0, 0, 0, 0},
+  @{0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0},
+  @{0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 1, 2, 0, 0, 0, 0, 0},
+  @{0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 5, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0},
+  @{0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+  @{0, 0, 5, 5, 5, 0, 0, 0, 0, 2, 3, 0, 0, 0, 0, 0, 2, 3, 0, 0, 0, 0},
+  @{0, 0, 0, 0, 2, 0, 0, 0, 5, 0, 0, 0, 0, 2, 0, 0, 0, 5, 0, 0, 0, 3},
+  @{0, 0, 0, 0, 2, 3, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 2, 2, 0, 0},
+  @{0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 1, 2, 3, 0, 0, 0},
+  @{0, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 2},
+  @{0, 0, 5, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 2},
+  @{0, 0, 1, 0, 0, 0, 0, 0, 2, 0, 0, 0, 5, 0, 0, 0, 2, 2, 2, 0, 0, 5},
+  @{0, 0, 0, 0, 2, 3, 2, 0, 0, 0, 5, 5, 0, 0, 0, 2, 3, 2, 0, 0, 0, 0},
+  @{0, 0, 0, 0, 2, 2, 2, 0, 0, 0, 0, 0, 3, 0, 0, 0, 5, 0, 0, 0, 0, 2},
+  @{0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0},
+  @{0, 0, 0, 0, 4, 0, 0, 0, 0, 5, 0, 0, 0, 3, 3, 0, 0, 0, 0, 5, 0, 0},
+  @{0, 0, 0, 0, 0, 5, 0, 0, 2, 2, 0, 0, 0, 0, 5, 5, 0, 0, 0, 4, 0, 0},
+  @{0, 0, 0, 0, 1, 4, 1, 0, 0, 0, 0, 1, 4, 1, 0, 0, 0, 0, 0, 1, 4, 1},
+  @{0, 0, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 0, 0, 2, 0, 0}
+}
+
+;; Background
+spawn{
+	val p_line = @{ '!', x = (w_screen/2), y = ((2 * h_screen)/3) -> math.floor }
+	every :draw{
+		pico.zet.color.clear (155, 89, 182)
+		pico.output.clear()
+		pico.output.draw.image("media/line.png", p_line)
+	}
+}
+
+func player (x0, y0){
+	val dim_player = pico.get.image("media/player.png")
+	val rect_player = @{ '!', x = x0, y = y0 - (dim_player.h/2), w = dim_player.w, h = dim_player.h }
+	val speed_x, jump_impulse, floor_y, gravity = (170, -240, y0 - (dim_player.h/2), 700)
+	var vel_y = 0
+	
+	set pub = @{
+		rect = rect_player
+	}
+	
+	watching \e { (e == :GameOver) } {
+        	par {
+        		await :start
+    			every _, ms in :clock {
+    				val dt = ms / 1000.0
+				set rect_player.x = rect_player.x + (speed_x * dt)
+
+
+				if rect_player.y < floor_y {
+					set vel_y = vel_y + (gravity * dt)
+        			}
+        			
+				set rect_player.y = rect_player.y + (vel_y * dt)
+				
+				if rect_player.y >= floor_y {
+					set rect_player.y = floor_y
+					set vel_y = 0
+				}
+			}
+		} with {
+			every :key.dn, 'Space' {
+				if rect_player.y >= floor_y {
+					set vel_y = jump_impulse
+					pico.output.sound "media/jump.wav"
+				}
+			}
+		} with{
+			every :draw{
+				pico.output.draw.image("media/player.png", rect_player)
+			}
+		} with{
+			every \e{ (e == :Checkpoint) || ( e == :collided) }{
+				set rect_player.x = x0 + 20
+				set rect_player.y = y0 - (dim_player.h/2)
+				set vel_y = 0
+			}
+		}			
+	}
+}
+
+func Cube (x0,y0,h_mult){
+	val dim_sprite = pico.get.image("media/cube.png")
+	val rect_cube = @{ '!', x = x0, y = y0 - ((dim_sprite.h * h_mult)/2), w = dim_sprite.w, h = (dim_sprite.h * h_mult) }
+	
+	set pub = @{
+		rect = rect_cube
+	}
+	
+	watching \e{ (e == :Checkpoint) } {
+		every :draw{
+			pico.output.draw.image("media/cube.png", rect_cube)
+		}
+	}
+}
+
+;;Game loop
+loop{
+	val p0_spawn = @{ '!', x = 60, y = (((h_screen * 2)/3)) }
+	pin single_player = spawn player (p0_spawn.x, p0_spawn.y)
+	pin Cubes = tasks (20)
+	var n_death, n_level = (0, 1)
+	
+	;; mult: multiplicador da altura do cubo
+	;; ds: deslocamento vertical
+	val Type_cube = @{
+    		[1] = @{ mult = 0.3, ds = 0   },
+    		[2] = @{ mult = 1.0, ds = 0   },
+		[3] = @{ mult = 1.5, ds = 0   },
+    		[4] = @{ mult = 1.8, ds = 0   },
+    		[5] = @{ mult = 0.5, ds = -22 }
+	}
+	
+	spawn{
+		val txt_death = @{ '!', x=100, y= (h_screen - 35), h = 18 }
+		val txt_level = @{ '!', x= ((w_screen - 100)), y= (h_screen - 35), h=18 }
+		every :draw {
+	    		pico.zet.color.draw "white"
+			pico.output.draw.text(n_death, txt_death)
+			pico.output.draw.text(n_level ++ "/" ++ #map, txt_level)
+		}
+	}
+		
+	watching :GameOver {
+		par{
+			loop{
+				val current_level = map[n_level]
+				loop i in #current_level {
+					val type = current_level[i]
+					if type != 0{
+						val data = Type_cube[type]
+						val px = 100 + (i * 20)
+						val py = ((h_screen * 2) / 3) + data.ds
+						spawn [Cubes] Cube (px, py,data.mult)
+					}		
+				}
+				await :Checkpoint
+			}
+		}with{
+			await (:key.dn, 'Space')
+			emit :start
+			pico.output.sound "media/music.wav"
+		} with{
+			val rect_checkpoint = @{'!', x = 540 + 30, y = 0 + 100, w = w_screen - 540, h = h_screen }
+			every :clock{
+				if pico.vs.rect_rect (rect_checkpoint, single_player.pub.rect){
+					if (n_level + 1) > #map => emit :GameOver
+					set n_level = n_level + 1
+					emit :Checkpoint
+				}
+				loop _, c in Cubes{
+					if pico.vs.rect_rect (c.pub.rect, single_player.pub.rect){
+						pico.output.sound "media/hit.wav"
+						set n_death = n_death + 1
+						emit [single_player] :collided
+					}
+				}
+			}
+		}
+	}
+	
+	spawn{
+		val txt_GG = @{ '%', x=0.5, y=0.3, h=0.2 }
+		val txt_score = @{ '%', x=0.5, y=0.55, h=0.15 }
+		val txt_taunt = @{ '%', x=0.5, y=0.75, h=0.15 }
+		
+		every :draw {
+			pico.output.clear ()
+			pico.zet.color.draw "white"
+			
+			pico.output.draw.text("you finished the game! :-D", txt_GG)
+			pico.output.draw.text(("and died #" ++ n_death ++ "'times"), txt_score)
+			pico.output.draw.text("can you do better?", txt_taunt)
+			
+		    }
+	}
+	await (:key.dn, 'up')
+}
+
